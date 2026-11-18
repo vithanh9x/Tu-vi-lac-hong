@@ -46,12 +46,37 @@ jobs:
               id 'com.android.application' version '8.6.1' apply false
           }
           EOF
+          cat > settings.gradle <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+                  gradlePluginPortal()
+                  mavenCentral()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  maven { url 'https://maven.aliyun.com/repository/central' }
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "TuViLacHongAndroid"
+          include ':app'
+          EOF
 
       - name: Generate Gradle wrapper
-        run: gradle wrapper --gradle-version 8.7
+        run: |
+          for attempt in 1 2 3 4 5; do
+            gradle wrapper --gradle-version 8.7 && break
+            if [ "$attempt" = 5 ]; then exit 1; fi
+            sleep 20
+          done
 
       - name: Build debug APK
-        run: ./gradlew --no-daemon assembleDebug
+        run: ./gradlew --no-daemon --refresh-dependencies assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
