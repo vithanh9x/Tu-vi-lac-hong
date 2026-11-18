@@ -40,7 +40,7 @@ jobs:
           cp AndroidManifest.xml app/src/main/AndroidManifest.xml
           cp MainActivity.java app/src/main/java/com/lacviet/tuvi/MainActivity.java
           cp index.html app/src/main/assets/index.html
-          cp app/build.gradle app/build.gradle
+          cp build.gradle app/build.gradle
           cat > build.gradle <<'EOF'
           plugins {
               id 'com.android.application' version '8.6.1' apply false
