@@ -117,7 +117,7 @@ function envRequired(name) {
   return v;
 }
 async function getVietQrToken() {
-  const base = (process.env.VIETQR_API_BASE || 'https://api.vietqr.org').replace(/\\/+$/,'');
+  const base = (process.env.VIETQR_API_BASE || 'https://api.vietqr.org').replace(/[/]+$/,'');
   const username = envRequired('VIETQR_API_USERNAME');
   const password = envRequired('VIETQR_API_PASSWORD');
   const auth = Buffer.from(username + ':' + password, 'utf8').toString('base64');
@@ -140,9 +140,9 @@ async function getEcommerceQrToken() {
   if (cached && cached.accessToken && Number(cached.expiresAt) > Date.now() + 15000) return cached.accessToken;
 
   const { token: initialToken, password } = await getVietQrToken();
-  const base = (process.env.VIETQR_API_BASE || 'https://api.vietqr.org').replace(/\\/+$/,'');
-  const ecommerceSite = envRequired('VIETQR_PUBLIC_ORIGIN').replace(/\\/+$/,'');
-  const basePath = (process.env.VIETQR_BASE_PATH || '/vqr').replace(/\\/+$/,'');
+  const base = (process.env.VIETQR_API_BASE || 'https://api.vietqr.org').replace(/[/]+$/,'');
+  const ecommerceSite = envRequired('VIETQR_PUBLIC_ORIGIN').replace(/[/]+$/,'');
+  const basePath = (process.env.VIETQR_BASE_PATH || '/vqr').replace(/[/]+$/,'');
   const webhook = ecommerceSite + basePath + '/bank/api/transaction-sync';
   const checkSum = crypto.createHash('md5')
     .update(password + ':' + ecommerceSite + 'VietQRAccesskey', 'utf8')
@@ -192,7 +192,7 @@ async function getEcommerceQrToken() {
   return accessToken;
 }
 async function generateVietQr(order) {
-  const base = (process.env.VIETQR_API_BASE || 'https://api.vietqr.org').replace(/\\/+$/,'');
+  const base = (process.env.VIETQR_API_BASE || 'https://api.vietqr.org').replace(/[/]+$/,'');
   const payload = {
     bankCode: envRequired('VIETQR_BANK_CODE'),
     bankAccount: envRequired('VIETQR_BANK_ACCOUNT'),
@@ -220,11 +220,11 @@ async function generateVietQr(order) {
     qrImage = await QRCode.toDataURL(rawQr, { errorCorrectionLevel:'M', margin:1, width:512 });
   } else if (rawQr.startsWith('data:image/')) {
     qrImage = rawQr;
-  } else if (typeof data.qrLink === 'string' && /^https:\\//i.test(data.qrLink)) {
+  } else if (typeof data.qrLink === 'string' && data.qrLink.startsWith('https://')) {
     qrImage = data.qrLink;
   }
   if (!qrImage) throw new Error('VietQR Generate QR thành công nhưng response không có qrCode/qrLink hợp lệ.');
-  return { qrImage, qrLink: typeof data.qrLink === 'string' ? data.qrLink : '', raw: data };
+  } else if (typeof data.qrLink === 'string' && data.qrLink.startsWith('https://')) {
 }
 function privateKeyPem() {
   if (process.env.LICENSE_RSA_PRIVATE_KEY_B64) return Buffer.from(process.env.LICENSE_RSA_PRIVATE_KEY_B64, 'base64').toString('utf8');
