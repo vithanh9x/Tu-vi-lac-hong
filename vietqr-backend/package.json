@@ -1,0 +1,11 @@
+{
+  "name": "tuvilachong-vietqr-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@upstash/redis": "^1.35.3",
+    "qrcode": "^1.5.4"
+  }
+}
