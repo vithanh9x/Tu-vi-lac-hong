@@ -35,18 +35,16 @@ module.exports = async function handler(req,res) {
     console.error('[health redis]', e && e.message ? e.message : 'unknown error');
   }
 
+  const bankAccount = process.env.SEPAY_BANK_ACCOUNT || process.env.VIETQR_BANK_ACCOUNT || '';
+  const bankCode = process.env.SEPAY_BANK_CODE || process.env.VIETQR_BANK_CODE || '';
+  const accountName = process.env.SEPAY_ACCOUNT_NAME || process.env.VIETQR_ACCOUNT_NAME || '';
   return json(res,200,{
-    service:'TuVi Lac Hong bank payment',
-    merchantName:process.env.VIETQR_MERCHANT_NAME || 'TUVILACHVN',
-    basePath:process.env.VIETQR_BASE_PATH || '/vqr',
-    callbackPaths:{
-      getToken:'/vqr/api/token_generate',
-      transactionSync:'/vqr/bank/api/transaction-sync',
-      sepayWebhook:'/api/sepay/webhook'
-    },
+    service:'TuVi Lac Hong SePay bank-transfer payment',
+    paymentProvider:'SePay QR image + SePay webhook',
+    webhookEndpoint:'/api/sepay/webhook',
     configured:{
-      vietqrCredentials:!!(process.env.VIETQR_API_USERNAME && process.env.VIETQR_API_PASSWORD) || !!process.env.VIETQR_API_KEY || !!process.env.VIETQR_STATIC_ACCESS_TOKEN,
-      bankAccount:!!process.env.VIETQR_BANK_ACCOUNT,
+      sepayQr:!!(bankAccount && bankCode && accountName),
+      bankAccount:!!bankAccount,
       sepayWebhookSecret:!!process.env.SEPAY_WEBHOOK_SECRET,
       redis:redisConnected,
       licenseSigner:licenseSignerMatchesApp(),
