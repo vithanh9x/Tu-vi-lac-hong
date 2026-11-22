@@ -4,10 +4,12 @@ const QRCode = require('qrcode');
 
 let redisClient;
 function redis() {
-  if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
-    throw new Error('Thiếu Upstash Redis. Hãy kết nối Redis với Vercel và khai báo UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN.');
+  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || process.env.REDIS_URL;
+  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) {
+    throw new Error('Thiếu Upstash Redis. Cần KV_REST_API_URL và KV_REST_API_TOKEN (hoặc UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN).');
   }
-  if (!redisClient) redisClient = Redis.fromEnv();
+  if (!redisClient) redisClient = new Redis({ url, token });
   return redisClient;
 }
 function json(res, status, data) {
