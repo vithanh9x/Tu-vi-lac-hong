@@ -253,5 +253,5 @@ module.exports = {
   redis, json, method, timingSafeEqualString, basicCredentials, getCallbackCredentials,
   callbackSecret, createCallbackBearer, validateCallbackBearer, orderTokenSecret,
   makeOrderProof, verifyOrderProof, randomFromAlphabet, normalizeContent, envRequired,
-  generateVietQr, signLicenseToken, responseOk, responseError
+  getVietQrToken, getEcommerceQrToken, generateVietQr, signLicenseToken, responseOk, responseError
 };
