@@ -10,7 +10,7 @@ module.exports = async function handler(req,res) {
       vietqrCredentials:!!(process.env.VIETQR_API_USERNAME && process.env.VIETQR_API_PASSWORD) || !!process.env.VIETQR_API_KEY || !!process.env.VIETQR_STATIC_ACCESS_TOKEN,
       bankAccount:!!process.env.VIETQR_BANK_ACCOUNT,
       callbackAuth:!!(process.env.VIETQR_CALLBACK_USERNAME && process.env.VIETQR_CALLBACK_PASSWORD && process.env.VIETQR_CALLBACK_JWT_SECRET),
-      redis:!!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN),
+      redis:!!((process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || process.env.REDIS_URL) && (process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN)),
       licenseSigner:!!(process.env.LICENSE_RSA_PRIVATE_KEY_B64 || process.env.LICENSE_RSA_PRIVATE_KEY),
       orderProof:!!process.env.ORDER_TOKEN_SECRET
     }
