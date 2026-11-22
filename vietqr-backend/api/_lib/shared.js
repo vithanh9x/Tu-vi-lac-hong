@@ -161,11 +161,24 @@ async function getEcommerceQrToken() {
     const data = await response.json().catch(()=>({}));
     return { response, data };
   }
-  // Host-to-Client flow: first authenticate with the access token from Get Token.
-  let result = await requestEcommerce({ 'Authorization':'Bearer ' + initialToken });
-  // Some older VietQR Ecommerce Sync documentation specifies Basic Auth for this step.
-  if ((result.response.status === 401 || result.response.status === 403) && !result.data.token?.access_token) {
-    result = await requestEcommerce({ 'Authorization':'Basic ' + Buffer.from(envRequired('VIETQR_API_USERNAME') + ':' + password, 'utf8').toString('base64') });
+  // VietQR API's detailed Ecommerce Sync endpoint specifies Basic Authentication.
+  // The overview Host-to-Client page also shows Bearer; use Basic first, with Bearer fallback.
+  async function requestEcommerce(headers) {
+    const response = await fetch(base + '/vqr/api/ecommerce', {
+      method:'POST',
+      headers:{ ...headers, 'Content-Type':'application/json; charset=UTF-8', 'Accept':'application/json' },
+      body:JSON.stringify(payload)
+    });
+    const data = await response.json().catch(()=>({}));
+    return { response, data };
+  }
+  let result = await requestEcommerce({
+    'Authorization':'Basic ' + Buffer.from(envRequired('VIETQR_API_USERNAME') + ':' + password, 'utf8').toString('base64')
+  });
+  if ((result.response.status === 401 || result.response.status === 403 ||
+       (result.response.status === 400 && result.data.message === 'E05')) &&
+      !result.data.token?.access_token) {
+    result = await requestEcommerce({ 'Authorization':'Bearer ' + initialToken });
   }
   const { response, data } = result;
   if (!response.ok || data.status === 'FAILED' || data.error === true) {
