@@ -144,43 +144,24 @@ async function getEcommerceQrToken() {
   const { token: initialToken, password } = await getVietQrToken();
   const base = (process.env.VIETQR_API_BASE || 'https://api.vietqr.org').replace(/[/]+$/,'');
   const ecommerceSite = envRequired('VIETQR_PUBLIC_ORIGIN').replace(/[/]+$/,'');
-  const basePath = (process.env.VIETQR_BASE_PATH || '/vqr').replace(/[/]+$/,'');
-  const webhook = ecommerceSite + basePath + '/bank/api/transaction-sync';
   const checkSum = crypto.createHash('md5')
     .update(password + ':' + ecommerceSite + 'VietQRAccesskey', 'utf8')
     .digest('hex');
-  const payload = { ecommerceSite, checkSum, webhook };
+  // Host-to-Client documentation: Bearer token from Get Token.
+  // code is an optional customer discriminator; do not invent it from the merchant display name.
+  const payload = { ecommerceSite, checkSum, webhook: process.env.VIETQR_WEBHOOK || '' };
   if (process.env.VIETQR_ECOMMERCE_CODE) payload.code = process.env.VIETQR_ECOMMERCE_CODE;
 
-  async function requestEcommerce(headers) {
-    const response = await fetch(base + '/vqr/api/ecommerce', {
-      method:'POST',
-      headers:{ ...headers, 'Content-Type':'application/json; charset=UTF-8', 'Accept':'application/json' },
-      body:JSON.stringify(payload)
-    });
-    const data = await response.json().catch(()=>({}));
-    return { response, data };
-  }
-  // VietQR API's detailed Ecommerce Sync endpoint specifies Basic Authentication.
-  // The overview Host-to-Client page also shows Bearer; use Basic first, with Bearer fallback.
-  async function requestEcommerce(headers) {
-    const response = await fetch(base + '/vqr/api/ecommerce', {
-      method:'POST',
-      headers:{ ...headers, 'Content-Type':'application/json; charset=UTF-8', 'Accept':'application/json' },
-      body:JSON.stringify(payload)
-    });
-    const data = await response.json().catch(()=>({}));
-    return { response, data };
-  }
-  let result = await requestEcommerce({
-    'Authorization':'Basic ' + Buffer.from(envRequired('VIETQR_API_USERNAME') + ':' + password, 'utf8').toString('base64')
+  const response = await fetch(base + '/vqr/api/ecommerce', {
+    method:'POST',
+    headers:{
+      'Authorization':'Bearer ' + initialToken,
+      'Content-Type':'application/json; charset=UTF-8',
+      'Accept':'application/json'
+    },
+    body:JSON.stringify(payload)
   });
-  if ((result.response.status === 401 || result.response.status === 403 ||
-       (result.response.status === 400 && result.data.message === 'E05')) &&
-      !result.data.token?.access_token) {
-    result = await requestEcommerce({ 'Authorization':'Bearer ' + initialToken });
-  }
-  const { response, data } = result;
+  const data = await response.json().catch(()=>({}));
   if (!response.ok || data.status === 'FAILED' || data.error === true) {
     throw new Error('VietQR Ecommerce Sync HTTP ' + response.status + ': ' + String(data.message || data.desc || 'Không có thông báo chi tiết').slice(0,300));
   }
@@ -188,24 +169,31 @@ async function getEcommerceQrToken() {
   if (!accessToken) {
     if (data.certificate || data.clientId) {
       await db.set('tv:vietqr:ecommerce-setup', {
-        certificate: data.certificate || null, clientId: data.clientId || null,
-        ecommerceSite, webhook, updatedAt: Date.now()
+        certificate: data.certificate || null,
+        clientId: data.clientId || null,
+        ecommerceSite,
+        webhook: payload.webhook,
+        updatedAt: Date.now()
       }, { ex: 90*24*60*60 });
     }
     throw new Error('VietQR Ecommerce Sync chưa trả token tạo QR. ' +
-      (data.certificate ? 'VietQR đã cấp certificate; cần hoàn tất đồng bộ tài khoản ngân hàng trong ứng dụng VietQR.' : 'Cần kiểm tra trạng thái Merchant/Ecommerce với VietQR.'));
+      (data.certificate ? 'VietQR đã cấp certificate; cần quét mã trong ứng dụng VietQR để đồng bộ tài khoản ngân hàng.' : 'Vui lòng kiểm tra trạng thái Merchant với VietQR.'));
   }
   const expiresIn = Number(data.token?.expires_in || data.data?.token?.expires_in || 300);
   const cacheTtl = Math.max(30, Math.min(240, (expiresIn > 0 ? expiresIn : 300) - 30));
   await db.set(cacheKey, { accessToken, expiresAt: Date.now() + cacheTtl * 1000 }, { ex: cacheTtl });
   if (data.certificate || data.clientId) {
     await db.set('tv:vietqr:ecommerce-setup', {
-      certificate: data.certificate || null, clientId: data.clientId || null,
-      ecommerceSite, webhook, updatedAt: Date.now()
+      certificate: data.certificate || null,
+      clientId: data.clientId || null,
+      ecommerceSite,
+      webhook: payload.webhook,
+      updatedAt: Date.now()
     }, { ex: 90*24*60*60 });
   }
   return accessToken;
 }
+
 async function generateVietQr(order) {
   const base = (process.env.VIETQR_API_BASE || 'https://api.vietqr.org').replace(/[/]+$/,'');
   const payload = {
