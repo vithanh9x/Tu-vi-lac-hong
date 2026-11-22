@@ -106,7 +106,7 @@ module.exports = async function handler(req, res) {
 
     const orderId = findOrderId(event.content || '');
     const bankAccount = String(event.accountNumber || '').replace(/\s/g, '');
-    const expectedAccount = String(process.env.VIETQR_BANK_ACCOUNT || '').replace(/\s/g, '');
+    const expectedAccount = String(process.env.SEPAY_BANK_ACCOUNT || process.env.VIETQR_BANK_ACCOUNT || '').replace(/\s/g, '');
     const amount = Number(event.transferAmount);
 
     // A real transfer without an application order is recorded but never unlocks content.
