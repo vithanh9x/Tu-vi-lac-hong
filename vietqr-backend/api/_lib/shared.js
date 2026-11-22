@@ -1,6 +1,5 @@
 const crypto = require('crypto');
 const { Redis } = require('@upstash/redis');
-const QRCode = require('qrcode');
 
 let redisClient;
 function redis() {
@@ -118,116 +117,32 @@ function envRequired(name) {
   if (!v) throw new Error('Thiếu cấu hình máy chủ: ' + name);
   return v;
 }
-async function getVietQrToken() {
-  const base = (process.env.VIETQR_API_BASE || 'https://api.vietqr.org').replace(/[/]+$/,'');
-  const username = envRequired('VIETQR_API_USERNAME');
-  const password = envRequired('VIETQR_API_PASSWORD');
-  const auth = Buffer.from(username + ':' + password, 'utf8').toString('base64');
-  const response = await fetch(base + '/vqr/api/peripheral/ecommerce/token_generate', {
-    method:'POST',
-    headers:{ 'Authorization':'Basic ' + auth, 'Content-Type':'application/json; charset=UTF-8', 'Accept':'application/json' }
-  });
-  const data = await response.json().catch(()=>({}));
-  if (!response.ok || data.status === 'FAILED' || data.error === true) {
-    throw new Error('VietQR Get Token HTTP ' + response.status + ': ' + String(data.message || data.desc || 'Không có thông báo chi tiết').slice(0,300));
+function envFirst(names) {
+  for (const name of names) {
+    const value = process.env[name];
+    if (typeof value === 'string' && value.trim()) return value.trim();
   }
-  const token = data.access_token || data.data?.access_token;
-  if (!token) throw new Error('VietQR Get Token không trả về access_token.');
-  return { token, password };
+  throw new Error('Thiếu cấu hình máy chủ: ' + names.join(' hoặc '));
 }
-async function getEcommerceQrToken() {
-  const db = redis();
-  const cacheKey = 'tv:vietqr:ecommerce-access-token';
-  const cached = await db.get(cacheKey);
-  if (cached && cached.accessToken && Number(cached.expiresAt) > Date.now() + 15000) return cached.accessToken;
-
-  const { token: initialToken, password } = await getVietQrToken();
-  const base = (process.env.VIETQR_API_BASE || 'https://api.vietqr.org').replace(/[/]+$/,'');
-  const ecommerceSite = envRequired('VIETQR_PUBLIC_ORIGIN').replace(/[/]+$/,'');
-  const checkSum = crypto.createHash('md5')
-    .update(password + ':' + ecommerceSite + 'VietQRAccesskey', 'utf8')
-    .digest('hex');
-  // Host-to-Client documentation: Bearer token from Get Token.
-  // code is an optional customer discriminator; do not invent it from the merchant display name.
-  const payload = { ecommerceSite, checkSum, webhook: process.env.VIETQR_WEBHOOK || '' };
-  if (process.env.VIETQR_ECOMMERCE_CODE) payload.code = process.env.VIETQR_ECOMMERCE_CODE;
-
-  const response = await fetch(base + '/vqr/api/ecommerce', {
-    method:'POST',
-    headers:{
-      'Authorization':'Bearer ' + initialToken,
-      'Content-Type':'application/json; charset=UTF-8',
-      'Accept':'application/json'
-    },
-    body:JSON.stringify(payload)
-  });
-  const data = await response.json().catch(()=>({}));
-  if (!response.ok || data.status === 'FAILED' || data.error === true) {
-    throw new Error('VietQR Ecommerce Sync HTTP ' + response.status + ': ' + String(data.message || data.desc || 'Không có thông báo chi tiết').slice(0,300));
+function generateSePayQr(order) {
+  const account = envFirst(['SEPAY_BANK_ACCOUNT', 'VIETQR_BANK_ACCOUNT']);
+  const bank = envFirst(['SEPAY_BANK_CODE', 'VIETQR_BANK_CODE']);
+  if (!/^\d{6,19}$/.test(account)) throw new Error('Số tài khoản MB Bank cấu hình không hợp lệ.');
+  if (!/^[A-Z0-9]{2,20}$/i.test(bank)) throw new Error('Mã ngân hàng cấu hình không hợp lệ.');
+  if (!Number.isSafeInteger(Number(order.amount)) || Number(order.amount) <= 0) {
+    throw new Error('Số tiền tạo QR không hợp lệ.');
   }
-  const accessToken = data.token?.access_token || data.data?.token?.access_token || data.access_token;
-  if (!accessToken) {
-    if (data.certificate || data.clientId) {
-      await db.set('tv:vietqr:ecommerce-setup', {
-        certificate: data.certificate || null,
-        clientId: data.clientId || null,
-        ecommerceSite,
-        webhook: payload.webhook,
-        updatedAt: Date.now()
-      }, { ex: 90*24*60*60 });
-    }
-    throw new Error('VietQR Ecommerce Sync chưa trả token tạo QR. ' +
-      (data.certificate ? 'VietQR đã cấp certificate; cần quét mã trong ứng dụng VietQR để đồng bộ tài khoản ngân hàng.' : 'Vui lòng kiểm tra trạng thái Merchant với VietQR.'));
+  const memo = String(order.content || '').trim();
+  if (!/^TVLHTV[A-HJ-NP-Z2-9]{11}$/.test(memo)) {
+    throw new Error('Nội dung chuyển khoản không hợp lệ.');
   }
-  const expiresIn = Number(data.token?.expires_in || data.data?.token?.expires_in || 300);
-  const cacheTtl = Math.max(30, Math.min(240, (expiresIn > 0 ? expiresIn : 300) - 30));
-  await db.set(cacheKey, { accessToken, expiresAt: Date.now() + cacheTtl * 1000 }, { ex: cacheTtl });
-  if (data.certificate || data.clientId) {
-    await db.set('tv:vietqr:ecommerce-setup', {
-      certificate: data.certificate || null,
-      clientId: data.clientId || null,
-      ecommerceSite,
-      webhook: payload.webhook,
-      updatedAt: Date.now()
-    }, { ex: 90*24*60*60 });
-  }
-  return accessToken;
-}
-
-async function generateVietQr(order) {
-  const base = (process.env.VIETQR_API_BASE || 'https://api.vietqr.org').replace(/[/]+$/,'');
-  const payload = {
-    bankCode: envRequired('VIETQR_BANK_CODE'),
-    bankAccount: envRequired('VIETQR_BANK_ACCOUNT'),
-    userBankName: envRequired('VIETQR_ACCOUNT_NAME'),
-    content: order.content,
-    qrType: 0,
-    amount: order.amount,
-    orderId: order.orderId,
-    transType: 'C',
-    reconciliation: true
-  };
-  const token = await getEcommerceQrToken();
-  const response = await fetch(base + '/vqr/api/qr/generate-customer', {
-    method:'POST',
-    headers:{ 'Authorization':'Bearer ' + token, 'Content-Type':'application/json; charset=UTF-8', 'Accept':'application/json' },
-    body: JSON.stringify(payload)
-  });
-  const data = await response.json().catch(()=>({}));
-  if (!response.ok || data.status === 'FAILED' || data.error === true) {
-    throw new Error('VietQR Generate QR HTTP ' + response.status + ': ' + String(data.message || data.desc || 'Không có thông báo chi tiết').slice(0,300));
-  }
-  const rawQr = typeof data.qrCode === 'string' ? data.qrCode : (typeof data.qrPayload === 'string' ? data.qrPayload : '');
-  let qrImage = '';
-  if (rawQr && rawQr.length > 12 && !rawQr.startsWith('https://') && !rawQr.startsWith('http://') && !rawQr.startsWith('data:image/')) {
-    qrImage = await QRCode.toDataURL(rawQr, { errorCorrectionLevel:'M', margin:1, width:512 });
-  } else if (rawQr.startsWith('data:image/')) {
-    qrImage = rawQr;
-  } else if (typeof data.qrLink === 'string' && data.qrLink.startsWith('https://')) {
-    qrImage = data.qrLink;
-  }
-  if (!qrImage) throw new Error('VietQR Generate QR thành công nhưng response không có qrCode/qrLink hợp lệ.');
-  return { qrImage, qrLink: typeof data.qrLink === 'string' ? data.qrLink : '', raw: data };
+  const base = process.env.SEPAY_QR_IMAGE_BASE || 'https://vietqr.app/img';
+  const url = new URL(base);
+  url.searchParams.set('acc', account);
+  url.searchParams.set('bank', bank);
+  url.searchParams.set('amount', String(Math.round(Number(order.amount))));
+  url.searchParams.set('des', memo);
+  return { qrImage: url.toString(), qrLink: '', provider: 'SEPAY' };
 }
 
 function privateKeyPem() {
@@ -254,5 +169,5 @@ module.exports = {
   redis, json, method, timingSafeEqualString, basicCredentials, getCallbackCredentials,
   callbackSecret, createCallbackBearer, validateCallbackBearer, orderTokenSecret,
   makeOrderProof, verifyOrderProof, randomFromAlphabet, normalizeContent, envRequired,
-  getVietQrToken, getEcommerceQrToken, generateVietQr, signLicenseToken, responseOk, responseError
+  generateSePayQr, signLicenseToken, responseOk, responseError
 };
