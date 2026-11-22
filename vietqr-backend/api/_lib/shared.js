@@ -224,8 +224,9 @@ async function generateVietQr(order) {
     qrImage = data.qrLink;
   }
   if (!qrImage) throw new Error('VietQR Generate QR thành công nhưng response không có qrCode/qrLink hợp lệ.');
-  } else if (typeof data.qrLink === 'string' && data.qrLink.startsWith('https://')) {
+  return { qrImage, qrLink: typeof data.qrLink === 'string' ? data.qrLink : '', raw: data };
 }
+
 function privateKeyPem() {
   if (process.env.LICENSE_RSA_PRIVATE_KEY_B64) return Buffer.from(process.env.LICENSE_RSA_PRIVATE_KEY_B64, 'base64').toString('utf8');
   if (process.env.LICENSE_RSA_PRIVATE_KEY) return process.env.LICENSE_RSA_PRIVATE_KEY.replace(/\\n/g,'\n');
