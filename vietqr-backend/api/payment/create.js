@@ -1,4 +1,4 @@
-const { redis, json, method, randomFromAlphabet, makeOrderProof, generateVietQr } = require('../_lib/shared');
+const { redis, json, method, randomFromAlphabet, makeOrderProof, generateSePayQr } = require('../_lib/shared');
 const ALLOWED = new Set(['menh','phumau','phucduc','dientrach','quanloc','noboc','thiendi','tatach','taibach','tutuc','phuthe','huynhde']);
 module.exports = async function handler(req, res) {
   if (!method(req,res,'POST')) return;
@@ -18,7 +18,7 @@ module.exports = async function handler(req, res) {
     const activeOrderId = await db.get(activeKey);
     if (activeOrderId) {
       const existing = await db.get('tv:order:' + String(activeOrderId));
-      if (existing && (existing.status === 'paid' || Date.now() <= Number(existing.expiresAt))) {
+      if (existing && (existing.status === 'paid' || (existing.paymentProvider === 'SEPAY' && Date.now() <= Number(existing.expiresAt)))) {
         const proof = makeOrderProof(existing.orderId, existing.deviceId, Math.floor(Number(existing.expiresAt)/1000) + 86400);
         return json(res,200,{
           ok:true, reused:true, orderId:existing.orderId, amount:existing.amount,
@@ -39,10 +39,10 @@ module.exports = async function handler(req, res) {
     const now = Date.now();
     const order = {
       orderId, pkg, targetId, deviceId, amount, content, requestCode,
-      status:'pending', createdAt:now, expiresAt:now + 30*60*1000,
+      status:'pending', paymentProvider:'SEPAY', createdAt:now, expiresAt:now + 30*60*1000,
       transactionId:null, referenceNumber:null, paidAt:null
     };
-    const qr = await generateVietQr(order);
+    const qr = generateSePayQr(order);
     const saved = await db.set('tv:order:' + orderId, { ...order, qrImage:qr.qrImage, qrLink:qr.qrLink }, { ex: 86400, nx:true });
     if (!saved) throw new Error('Mã đơn hàng bị trùng, vui lòng tạo lại.');
     await db.set(activeKey, orderId, { ex: 86400 });
@@ -52,7 +52,7 @@ module.exports = async function handler(req, res) {
       qrImage:qr.qrImage, qrLink:qr.qrLink, orderToken:proof, expiresAt:order.expiresAt
     });
   } catch (e) {
-    console.error('[VietQR create-order]', e && e.message ? e.message : 'unknown error');
-    return json(res,500,{error:true,message:e?.message || 'Không thể tạo đơn thanh toán VietQR.'});
+    console.error('[SePay create-order]', e && e.message ? e.message : 'unknown error');
+    return json(res,500,{error:true,message:e?.message || 'Không thể tạo đơn thanh toán SePay.'});
   }
 };
