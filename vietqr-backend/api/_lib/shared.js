@@ -216,7 +216,7 @@ async function generateVietQr(order) {
   }
   const rawQr = typeof data.qrCode === 'string' ? data.qrCode : (typeof data.qrPayload === 'string' ? data.qrPayload : '');
   let qrImage = '';
-  if (rawQr && rawQr.length > 12 && !/^https?:\\/\\//i.test(rawQr) && !rawQr.startsWith('data:image/')) {
+  if (rawQr && rawQr.length > 12 && !rawQr.startsWith('https://') && !rawQr.startsWith('http://') && !rawQr.startsWith('data:image/')) {
     qrImage = await QRCode.toDataURL(rawQr, { errorCorrectionLevel:'M', margin:1, width:512 });
   } else if (rawQr.startsWith('data:image/')) {
     qrImage = rawQr;
